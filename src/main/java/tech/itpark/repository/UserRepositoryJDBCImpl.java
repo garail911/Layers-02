@@ -26,7 +26,6 @@ public class UserRepositoryJDBCImpl implements UserRepository {
                     rs.getLong("created")
             );
         } catch (SQLException e) {
-
             throw new DataAccessException(e);
         }
     };
@@ -34,7 +33,6 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     public UserRepositoryJDBCImpl(Connection connection) {
         this.connection = connection;
     }
-
 
     @Override
     public List<UserEntity> findAll() {
@@ -59,19 +57,13 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     public Optional<UserEntity> findById(Long id) {
         try (
                 final PreparedStatement stmt = connection.prepareStatement(
-                        "SELECT id, login, password, name, secret, roles, EXTRACT(EPOCH FROM created) created, remowed FROM id WHERE id = ?"
+                        "SELECT id, login, password, name, secret, roles, EXTRACT(EPOCH FROM created) created, removed FROM users WHERE id = ?"
                 );
-
         ) {
             stmt.setLong(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
-
-                if (rs.next()) {
-                    Optional.of(mapper.map(rs));
-                }
+                return rs.next() ? Optional.of(mapper.map(rs)) : Optional.empty();
             }
-            return Optional.empty();
-
         } catch (SQLException e) {
             throw new DataAccessException(e);
         }
@@ -81,10 +73,10 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     public UserEntity save(UserEntity entity) {
         if (entity.getId() == 0) {
             try (
-                    PreparedStatement stmt = connection.prepareStatement(
-                            "INSERT INTO users login, paasword, name, secret, roles, remowed, EXTRACT(EPOCH FROM created) created VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            Statement.RETURN_GENERATED_KEYS
-                    );
+                    final PreparedStatement stmt = connection.prepareStatement(
+                            "INSERT INTO users (login, password, name, secret, roles) VALUES (?, ?, ?, ?, ?)" +
+                                    " RETURNING id, login, password, name, secret, roles, removed, EXTRACT(EPOCH FROM created) created"
+                    )
             ) {
                 int index = 0;
                 stmt.setString(++index, entity.getLogin());
@@ -92,27 +84,20 @@ public class UserRepositoryJDBCImpl implements UserRepository {
                 stmt.setString(++index, entity.getName());
                 stmt.setString(++index, entity.getSecret());
                 stmt.setArray(++index, connection.createArrayOf("TEXT", entity.getRoles().toArray()));
-                stmt.setBoolean(++index, entity.isRemoved());
-                stmt.setLong(++index, entity.getCreated());
 
                 stmt.execute();
-
-                try (ResultSet keys = stmt.getGeneratedKeys();) {
-                    if (keys.next()) {
-                        int id = keys.getInt(1);
-                        return entity;
-                    }
-                    throw new DataAccessException("No keys generated");
-                }
+                return entity;
 
             } catch (SQLException e) {
                 throw new DataAccessException(e);
             }
         }
+
         try (
                 final PreparedStatement stmt = connection.prepareStatement(
-                        "UPDATE users SET login = ?, password = ?, name =?, secret = ?, roles = ?, remowed = ?, created = ? WHERE  id =?"
-                );
+                        "UPDATE users SET login = ?, password = ?, name =?, secret = ?, roles = ? WHERE  id =?" +
+                                "RETURNING id, login, password, name, secret, roles, removed, EXTRACT(EPOCH FROM created) created"
+                )
         ) {
             int index = 0;
             stmt.setString(++index, entity.getLogin());
@@ -120,12 +105,11 @@ public class UserRepositoryJDBCImpl implements UserRepository {
             stmt.setString(++index, entity.getName());
             stmt.setString(++index, entity.getSecret());
             stmt.setArray(++index, connection.createArrayOf("TEXT", entity.getRoles().toArray()));
-            stmt.setBoolean(++index, entity.isRemoved());
-            stmt.setLong(++index, entity.getCreated());
+            stmt.setLong(++index, entity.getId());
 
             stmt.execute();
-
             return entity;
+
         } catch (SQLException e) {
             throw new DataAccessException(e);
         }
@@ -134,15 +118,14 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     @Override
     public boolean removeById(Long id) {
         try (
-                final PreparedStatement stmt = connection.prepareStatement("DELETE FROM users WHERE id = ?");
+                final PreparedStatement stmt = connection.prepareStatement(
+                        "DELETE FROM users WHERE id = ?")
         ) {
             stmt.setLong(1, id);
+            return stmt.execute();
 
-            stmt.executeUpdate();
-
-
-            return mapper.map(stmt.getResultSet()).isRemoved();
-
+//            stmt.executeUpdate();
+//            return mapper.map(stmt.getResultSet()).isRemoved();
         } catch (SQLException e) {
             throw new DataAccessException(e);
         }
@@ -152,8 +135,8 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     public boolean existByLogin(String login) {
         try (
                 final PreparedStatement stmt = connection.prepareStatement(
-                        "SELECT id  FROM users WHERE login =?"
-                );
+                        "SELECT login FROM users WHERE login = ?"
+                )
         ) {
             stmt.setString(1, login);
             try (final ResultSet rs = stmt.executeQuery()) {
@@ -170,19 +153,16 @@ public class UserRepositoryJDBCImpl implements UserRepository {
     public Optional<UserEntity> findByLogin(String login) {
         try (
                 final PreparedStatement stmt = connection.prepareStatement(
-                        "SELECT id, login, password, name, secret, roles, remowed, EXTRACT(EPOCH FROM created)created FROM users WHERE login = ?"
+                        "SELECT id, login, password, name, secret, roles, EXTRACT(EPOCH FROM created) created, removed FROM users WHERE login = ?"
                 );
-        ){
-            stmt.setString(1,login);
-            try (final ResultSet rs = stmt.executeQuery()){
-                while (rs.next()) {
-                    return Optional.ofNullable(mapper.map(rs));
-                }
-            }
 
-        }catch (SQLException e) {
+        ) {
+            stmt.setString(1, login);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? Optional.of(mapper.map(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
             throw new DataAccessException(e);
         }
-        return Optional.empty();
     }
 }

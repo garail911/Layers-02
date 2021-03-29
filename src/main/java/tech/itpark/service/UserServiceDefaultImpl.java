@@ -9,8 +9,6 @@ import tech.itpark.model.*;
 import tech.itpark.repository.UserRepository;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 
 public class UserServiceDefaultImpl implements UserService {
@@ -33,7 +31,7 @@ public class UserServiceDefaultImpl implements UserService {
                     model.getSecret(),
                     Set.of("ROLE_USER"),
                     false,
-                    OffsetDateTime.now().toEpochSecond() // long -> кол-во секунд с 1970 года 1 янв 00:00 по UTC
+                    OffsetDateTime.now().toEpochSecond()
             ));
 
             return new UserModel(
@@ -57,8 +55,7 @@ public class UserServiceDefaultImpl implements UserService {
             }
 
             if (!entity.getPassword().equals(model.getPassword())) {
-                // username or password invalid
-                // password invalid
+
                 throw new PasswordInvalidException();
             }
             return new UserModel(
@@ -83,7 +80,7 @@ public class UserServiceDefaultImpl implements UserService {
                 throw new SecretInvalidException();
             }
             entity.setPassword(model.getNewPassword());
-            repository.save(entity);
+//            repository.save(entity);
 
             return new UserModel(
                     entity.getId(),
@@ -104,8 +101,10 @@ public class UserServiceDefaultImpl implements UserService {
             if (entity.isRemoved()) {
                 throw new UsernameNotExistsException(model.getLogin());
             }
-
-            return repository.removeById(entity.getId());
-
+        if (!entity.getPassword().equals(model.getPassword())) {
+            throw new PasswordInvalidException(model.getLogin());
+        }
+        entity.setRemoved(true);
+        return entity.isRemoved();
     }
 }
